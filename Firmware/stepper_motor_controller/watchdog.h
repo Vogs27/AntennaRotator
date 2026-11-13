@@ -1,7 +1,13 @@
 /*!
 * @file watchdog.h
 *
-* It is a driver for watchdog timer.
+* Watchdog timer for SAMD21/SAMD51, based on Adafruit_SleepyDog.
+*
+* On SAMD the watchdog cannot run an interrupt routine before the reset (as
+* the old AVR ISR did): the chip is simply reset. The firmware therefore
+* checks the reset cause at boot and, if the watchdog fired, starts in the
+* error state with ERR_WDT latched and the motors disabled. The easycomm
+* handler keeps running, so GS/GE/RB/RESET still work.
 *
 * Licensed under the GPLv3
 *
@@ -10,90 +16,36 @@
 #ifndef WATCHDOG_H_
 #define WATCHDOG_H_
 
-#include "globals.h"
-#include "easycomm.h"
-#include "rotator_pins.h"
-//#include <Adafruit_SleepyDog.h>
+#include <Arduino.h>
+#include <Adafruit_SleepyDog.h>
 
-/**************************************************************************/
-/*!
-    @brief    Class that functions for interacting with a watchdog timer
-*/
-/**************************************************************************/
-class wdt_timer{
+class wdt_timer {
 public:
 
-    /**************************************************************************/
     /*!
-        @brief    Initialize watchdog timer to 2sec time out and to set up
-                  interrupt routine
+        @brief  Enable the watchdog
+        @param  timeout_ms  Requested timeout, rounded down to a power of two
+                            of WDT cycles by SleepyDog (max ~16 s on SAMD)
+        @return Actual timeout in ms
     */
-    /**************************************************************************/
-    void watchdog_init() {
-      //Watchdog.enable(20000);
+    int watchdog_init(int timeout_ms) {
+        return Watchdog.enable(timeout_ms);
     }
 
-    /**************************************************************************/
-    /*!
-        @brief    Reset the watchdog timer
-    */
-    /**************************************************************************/
     void watchdog_reset() {
-      //Watchdog.reset();
+        Watchdog.reset();
+    }
+
+    /*!
+        @brief  True if the last reset was caused by the watchdog
+    */
+    bool reset_by_watchdog() {
+#if defined(__SAMD51__)
+        return (Watchdog.resetCause() & RSTC_RCAUSE_WDT) != 0;
+#else
+        return (Watchdog.resetCause() & PM_RCAUSE_WDT) != 0;
+#endif
     }
 };
-
-/**************************************************************************/
-/*!
-    @brief    Watchdog timer interrupt routine that implements a minimal
-              easycomm protocol to get the errors and reset the uC
-*/
-/**************************************************************************/
-/*
-ISR(WDT_vect) {
-    // Disable motors
-    digitalWrite(MOTOR_EN, LOW);
-    // Set error
-    rotator.rotator_error = wdt_error;
-    rotator.rotator_status = error;
-    // Enable interrupts for serial communication
-    sei();
-
-    while (1) {
-        // Reset the watchdog timer because the interrupts are enabled
-        wdt_reset();
-        // Implement a minimal easycomm protocol to get the errors and reset uC
-        char buffer[BUFFER_SIZE];
-        char incomingByte;
-        static uint16_t BufferCnt = 0;
-        String str1, str2, str3, str4, str5, str6;
-        while (rs485.available() > 0) {
-            incomingByte = rs485.read();
-            if (incomingByte == '\n' || incomingByte == '\r') {
-                buffer[BufferCnt] = 0;
-                if (buffer[0] == 'G' && buffer[1] == 'S') {
-                    str1 = String("GS");
-                    str2 = String(rotator.rotator_status, DEC);
-                    str3 = String("\n");
-                    rs485.print(str1 + str2 + str3);
-                } else if (buffer[0] == 'G' && buffer[1] == 'E') {
-                    str1 = String("GE");
-                    str2 = String(rotator.rotator_error, DEC);
-                    str3 = String("\n");
-                    rs485.print(str1 + str2 + str3);
-                } else if (buffer[0] == 'R' && buffer[1] == 'B') {
-                    while(1);
-                }
-                BufferCnt = 0;
-                rs485.flush();
-            } else {
-                buffer[BufferCnt] = incomingByte;
-                BufferCnt++;
-            }
-        }
-        // Reset the watchdog timer
-        wdt_reset();
-    }
-}*/
 
 #endif /* WATCHDOG_H_ */

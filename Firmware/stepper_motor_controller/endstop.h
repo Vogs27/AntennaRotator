@@ -10,6 +10,8 @@
 #ifndef ENDSTOP_H_
 #define ENDSTOP_H_
 
+#include <Arduino.h>
+
 /**************************************************************************/
 /*!
     @brief    Class that functions for interacting with end-stop.
@@ -29,11 +31,16 @@ public:
 
     /**************************************************************************/
     /*!
-        @brief    Initialize the Input pin for end-stop
+        @brief    Initialize the Input pin for end-stop.
+                  The switch (SPDT) drives the line both ways, so the internal
+                  pull only matters when the cable is disconnected. It pulls
+                  towards the NOT-triggered level: a broken cable then looks
+                  like an end-stop that never triggers, which ends in a
+                  homing error instead of a false home.
     */
     /**************************************************************************/
     void init() {
-        pinMode(_pin, INPUT_PULLUP);
+        pinMode(_pin, _default_state == HIGH ? INPUT_PULLDOWN : INPUT_PULLUP);
     }
 
     /**************************************************************************/
